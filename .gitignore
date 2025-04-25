@@ -1,0 +1,32 @@
+
+---
+
+### `.gitignore`
+
+```gitignore
+# Bytecode-Dateien
+__pycache__/
+*.py[cod]
+
+# Temporäre Dateien
+*.log
+*.tmp
+*.bak
+*.swp
+
+# Editor-spezifisch
+.vscode/
+.idea/
+
+# macOS-Dateien
+.DS_Store
+
+# Ausgabedateien
+output*.csv
+*.zip
+*.tar.gz
+
+# Virtuelle Umgebungen
+venv/
+.env/
+
