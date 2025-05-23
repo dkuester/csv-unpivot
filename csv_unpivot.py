@@ -4,11 +4,22 @@ import os
 from datetime import datetime, timedelta
 from collections import defaultdict
 
-MAX_FILE_SIZE = 8 * 1024 * 1024  # 8 MB in Bytes
+# Mapping für die Wertetypen
+VALUE_TYPE_MAP = {
+    '1001': 'Alle_Anrufe',
+    '1020': 'Belegung',
+    '1003': 'Annahme',
+    '1021': 'Besetzte',
+    '1023': 'Abfall < 5 Sekunden',
+    '1022': 'Abfall > 5 Sekunden',
+    '1024': 'Annahme < 10 Sekunden',
+    '1026': 'Annahme < 20 Sekunden',
+    '1027': 'Überlauf',
+}
 
 def parse_arguments():
-    parser = argparse.ArgumentParser(description='Transformiere und kombiniere CSV-Dateien.')
-    parser.add_argument('input_files', nargs='+', help='Pfad zu einer oder mehreren Eingabe-CSV-Dateien')
+    parser = argparse.ArgumentParser(description='Transformiere und kombiniere CSV-Dateien aus einem Ordner.')
+    parser.add_argument('--input-dir', required=True, help='Pfad zum Eingabe-Ordner mit CSV-Dateien')
     parser.add_argument('-o', '--output', default='transformed.csv', help='Pfad zur Ausgabedatei')
     return parser.parse_args()
 
@@ -39,48 +50,66 @@ def read_and_transform_csv(filepath):
     return transformed_rows
 
 def pivot_data(rows):
-    pivoted = defaultdict(lambda: {'Alle_Anrufe': 0, 'Annahme': 0})
+    pivoted = defaultdict(lambda: {name: 0 for name in VALUE_TYPE_MAP.values()})
     for row in rows:
-        key = (row['curve_event_type_id'], row['curve_id'], row['curve_version_id'], row['date'], row['raster'], row['uhrzeit'])
-        if row['curve_value_type_id'] == '1001':
-            pivoted[key]['Alle_Anrufe'] = row['wert']
-        elif row['curve_value_type_id'] == '1003':
-            pivoted[key]['Annahme'] = row['wert']
+        value_type = row['curve_value_type_id']
+        if value_type not in VALUE_TYPE_MAP:
+            continue
+        key = (
+            row['curve_event_type_id'],
+            row['curve_id'],
+            row['curve_version_id'],
+            row['date'],
+            row['raster'],
+            row['uhrzeit'],
+        )
+        column_name = VALUE_TYPE_MAP[value_type]
+        pivoted[key][column_name] = row['wert']
     return pivoted
 
 def write_transformed_csv(pivoted_data, output_path):
-    fieldnames = ['curve_event_type_id', 'curve_id', 'curve_version_id', 'date', 'raster', 'uhrzeit', 'Alle_Anrufe', 'Annahme']
+    fieldnames = ['curve_event_type_id', 'curve_id', 'curve_version_id', 'date', 'raster', 'uhrzeit'] + list(VALUE_TYPE_MAP.values())
+
+    # Sortiere nach Datum und Uhrzeit
+    sorted_items = sorted(
+        pivoted_data.items(),
+        key=lambda item: (item[0][3], item[0][5])  # [3]=date, [5]=uhrzeit
+    )
+
     file_index = 1
-    output_file = f"{output_path}_{file_index}.csv"
-    
-    # Open the first file
+    max_size_bytes = 8 * 1024 * 1024  # 8 MB
+    output_base, ext = os.path.splitext(output_path)
+    output_file = f"{output_base}_{file_index}{ext}"
     csvfile = open(output_file, 'w', newline='')
     writer = csv.DictWriter(csvfile, fieldnames=fieldnames, delimiter=';')
     writer.writeheader()
+    current_file_size = csvfile.tell()
 
-    for key, values in pivoted_data.items():
+    for key, values in sorted_items:
         row = dict(zip(fieldnames[:6], key))
         row.update(values)
         writer.writerow(row)
-        
-        # Check if the file size exceeds the limit and split if necessary
-        if os.path.getsize(output_file) >= MAX_FILE_SIZE:
-            # Close the current file and open a new one
+        current_file_size = csvfile.tell()
+        if current_file_size >= max_size_bytes:
             csvfile.close()
             file_index += 1
-            output_file = f"{output_path}_{file_index}.csv"
+            output_file = f"{output_base}_{file_index}{ext}"
             csvfile = open(output_file, 'w', newline='')
             writer = csv.DictWriter(csvfile, fieldnames=fieldnames, delimiter=';')
             writer.writeheader()
-    
-    # Close the last file after writing all rows
+
     csvfile.close()
 
 def main():
     args = parse_arguments()
+    input_dir = args.input_dir
+
     all_rows = []
-    for file in args.input_files:
-        all_rows.extend(read_and_transform_csv(file))
+    for filename in os.listdir(input_dir):
+        if filename.lower().endswith('.csv'):
+            filepath = os.path.join(input_dir, filename)
+            all_rows.extend(read_and_transform_csv(filepath))
+
     pivoted = pivot_data(all_rows)
     write_transformed_csv(pivoted, args.output)
 
