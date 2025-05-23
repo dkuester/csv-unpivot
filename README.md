@@ -2,8 +2,6 @@
 
 Ein CLI-Tool zum Transformieren und Kombinieren von CSV-Dateien mit 15-Minuten-Zeitwerten. Die Daten werden gruppiert, normalisiert und nach Datum/Uhrzeit sortiert ausgegeben. Die Ausgabedatei wird bei Erreichen von 8 MB automatisch gesplittet.
 
-Entwickelt von [@dkuester](https://github.com/dkuester).
-
 ---
 
 ## 📦 Funktionen
